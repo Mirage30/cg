@@ -24,7 +24,7 @@ enum class ModeType {Normal, Insert, Translate, Delete, Color} mode;
 
 Vector4f colors[9];
 
-//reload all triangles from uniform to vertices_lines and vertices_triangles
+//Reload all triangles from uniform to vertices_lines and vertices_triangles
 void reload_vertices(UniformAttributes& uniform, std::vector<VertexAttributes>& vertices_lines, std::vector<VertexAttributes>& vertices_triangles) {
     vertices_lines.clear();
     vertices_triangles.clear();
@@ -51,7 +51,8 @@ void reload_vertices(UniformAttributes& uniform, std::vector<VertexAttributes>& 
     }
 }
 
-void select_trianlge(UniformAttributes& uniform, std::vector<VertexAttributes>& vertices_lines, Vector4f& color) {
+//Select a triangle in Translation Mode. Change the color of its wireframe to a specific color
+void select_trianlge(UniformAttributes& uniform, std::vector<VertexAttributes>& vertices_lines, const Vector4f& color) {
 #ifdef DEBUG
     if (uniform.curTriangleIdx < 0) {
         cout << "[ERROR] index of array equals to -1." << endl;
@@ -63,6 +64,7 @@ void select_trianlge(UniformAttributes& uniform, std::vector<VertexAttributes>& 
     }
 }
 
+//Release a triangle in Translation Mode. Change the color of its wireframe to black
 void release_triangle(UniformAttributes& uniform, std::vector<VertexAttributes>& vertices_lines) {
 #ifdef DEBUG
     if (uniform.curTriangleIdx < 0) {
@@ -75,7 +77,8 @@ void release_triangle(UniformAttributes& uniform, std::vector<VertexAttributes>&
     }
 }
 
-void start_moving_triangle(UniformAttributes& uniform, std::vector<VertexAttributes>& vertices_triangles, Vector4f& color) {
+//Start moving a triangle. Change the color of triangle to a specific color
+void start_moving_triangle(UniformAttributes& uniform, std::vector<VertexAttributes>& vertices_triangles, const Vector4f& color) {
 #ifdef DEBUG
     if (uniform.curTriangleIdx < 0) {
         cout << "[ERROR] index of array equals to -1." << endl;
@@ -87,7 +90,8 @@ void start_moving_triangle(UniformAttributes& uniform, std::vector<VertexAttribu
     }    
 }
 
-void stop_moving_triangle(UniformAttributes& uniform, std::vector<VertexAttributes>& vertices_triangles, std::vector<VertexAttributes>& vertices_lines) {
+//Stop moving a triangle. Change its color to original color. Record the current transformation matrix to uniform
+void stop_moving_triangle(UniformAttributes& uniform, std::vector<VertexAttributes>& vertices_triangles) {
 #ifdef DEBUG
     if (uniform.curTriangleIdx < 0) {
         cout << "[ERROR] index of array equals to -1." << endl;
@@ -101,6 +105,7 @@ void stop_moving_triangle(UniformAttributes& uniform, std::vector<VertexAttribut
     }    
 }
 
+//Move the selected triangle dx and dy on x and y axis, respectively
 void move_triangle(UniformAttributes& uniform, std::vector<VertexAttributes>& vertices_triangles, std::vector<VertexAttributes>& vertices_lines, const float& dx, const float& dy) {
 #ifdef DEBUG
     if (uniform.curTriangleIdx < 0) {
@@ -121,23 +126,52 @@ void move_triangle(UniformAttributes& uniform, std::vector<VertexAttributes>& ve
         vertices_lines[uniform.curTriangleIdx * 6 + i].transformation = mat;
 }
 
+//Exit from Insertion Mode
 void quit_insertion(std::vector<VertexAttributes>& vertices_preview_lines) {
     vertices_preview_lines.clear();
 }
 
+//Exit from Translation Mode
 void quit_translation(UniformAttributes& uniform, std::vector<VertexAttributes>& vertices_lines, std::vector<VertexAttributes>& vertices_triangles) {
     uniform.curTriangleIdx = -1;
     uniform.moving = false;
+    //reload all vertices in case moving is interrupted by mode switch
     reload_vertices(uniform, vertices_lines, vertices_triangles);
 }
 
+//Exit from Color Mode
 void quit_color(UniformAttributes& uniform, std::vector<VertexAttributes>& vertices_points) {
     vertices_points.clear();
     uniform.curVertexIdx = -1;
 }
 
-//rotate the selected triangle by alpha degree, counter-clockwise
-void rotate_triangle(UniformAttributes& uniform, std::vector<VertexAttributes>& vertices_lines, std::vector<VertexAttributes>& vertices_triangles, double alpha) {
+//Exit from Animation Mode
+void quit_animation(UniformAttributes& uniform) {
+    if (!uniform.keyframes.empty()) {
+        cout << "Exit from animation." << endl;
+        uniform.keyframes.clear();
+        cout << "Clean all the keyframes." << endl;
+    }
+}
+
+//Set the transformation of the idxth triangle in vertices_lines and vertices_triangles (which will be rendered) to trans 
+void set_rendering_triangle_transformation(std::vector<VertexAttributes>& vertices_lines, std::vector<VertexAttributes>& vertices_triangles, int idx, const Matrix4f& trans) {
+    for (int i = 0; i < 3; ++i)
+        vertices_triangles[3 * idx + i].transformation = trans;
+    for (int i = 0; i < 6; ++i)
+        vertices_lines[6 * idx + i].transformation = trans;
+}
+
+//Set the transformation of the idxth triangle in all place (includes uniform.triangles, vertices_lines and vertices_triangles) to trans 
+void set_all_triangle_transformation(UniformAttributes& uniform, std::vector<VertexAttributes>& vertices_lines, std::vector<VertexAttributes>& vertices_triangles, int idx, const Matrix4f& trans) {
+    for (int i = 0; i < 3; ++i)
+        uniform.triangles[idx].vertices[i].transformation = vertices_triangles[3 * idx + i].transformation = trans;
+    for (int i = 0; i < 6; ++i)
+        vertices_lines[6 * idx + i].transformation = trans;
+}
+
+//Rotate the selected triangle by alpha degree, counter-clockwise
+void rotate_triangle(UniformAttributes& uniform, std::vector<VertexAttributes>& vertices_lines, std::vector<VertexAttributes>& vertices_triangles, float alpha) {
     auto& tri = uniform.triangles[uniform.curTriangleIdx];
     Vector4f barycenter = tri.vertices[0].transformation * tri.barycenter;
     Matrix4f trans = Matrix4f::Identity(), temp;
@@ -160,17 +194,11 @@ void rotate_triangle(UniformAttributes& uniform, std::vector<VertexAttributes>& 
         0, 0, 1, 0,
         0, 0, 0, 1;
     trans = temp * trans * tri.vertices[0].transformation;
-    for (int i = 0; i < 3; ++i) {
-        tri.vertices[i].transformation = trans;
-        vertices_triangles[3 * uniform.curTriangleIdx + i].transformation = trans;
-    }
-    for (int i = 0; i < 6; ++i) {
-        vertices_lines[6 * uniform.curTriangleIdx + i].transformation = trans;
-    }
+    set_all_triangle_transformation(uniform, vertices_lines, vertices_triangles, uniform.curTriangleIdx, trans);
 }
 
-//scale the selected triangle by s time
-void scale_triangle(UniformAttributes& uniform, std::vector<VertexAttributes>& vertices_lines, std::vector<VertexAttributes>& vertices_triangles, double s) {
+//Scale the selected triangle by s time
+void scale_triangle(UniformAttributes& uniform, std::vector<VertexAttributes>& vertices_lines, std::vector<VertexAttributes>& vertices_triangles, float s) {
     auto& tri = uniform.triangles[uniform.curTriangleIdx];
     Vector4f barycenter = tri.vertices[0].transformation * tri.barycenter;
     Matrix4f trans = Matrix4f::Identity(), temp;
@@ -192,16 +220,11 @@ void scale_triangle(UniformAttributes& uniform, std::vector<VertexAttributes>& v
         0, 0, 1, 0,
         0, 0, 0, 1;
     trans = temp * trans * tri.vertices[0].transformation;
-    for (int i = 0; i < 3; ++i) {
-        tri.vertices[i].transformation = trans;
-        vertices_triangles[3 * uniform.curTriangleIdx + i].transformation = trans;
-    }
-    for (int i = 0; i < 6; ++i) {
-        vertices_lines[6 * uniform.curTriangleIdx + i].transformation = trans;
-    }
+    set_all_triangle_transformation(uniform, vertices_lines, vertices_triangles, uniform.curTriangleIdx, trans);
 }
 
-Matrix4f get_scale_matrix(double s) {
+//Get a matrix which can scale up by s times
+Matrix4f get_scale_matrix(float s) {
     Matrix4f ret;
     ret << 
         s, 0, 0, 0,
@@ -211,7 +234,8 @@ Matrix4f get_scale_matrix(double s) {
     return ret;
 }
 
-Matrix4f get_translate_matrix(double dx, double dy) {
+//Get a matrix which can translate dx and dy on x and y axis, respectively
+Matrix4f get_translate_matrix(float dx, float dy) {
     Matrix4f ret;
     ret <<
         1, 0, 0, dx,
@@ -232,6 +256,10 @@ int main(int argc, char *args[])
     colors[6] << 0, 0.5, 0.5, 1;
     colors[7] << 0.5, 0.5, 0, 1;
     colors[8] << 0.5, 0, 0.5, 1;
+
+    const Vector4f& color_line_selected = colors[1];
+    const Vector4f& color_tri_default = colors[0];
+    const Vector4f& color_tri_selected = colors[2];
 
     int width = 1000;
     int height = 800;
@@ -320,12 +348,13 @@ int main(int argc, char *args[])
 
         if (mode == ModeType::Insert && is_pressed) {
             if (button == 1) {
+                quit_animation(uniform);
                 vertices_temp.push_back(VertexAttributes(dx, dy, 1));
                 if (vertices_temp.size() == 3) {
                     auto& v1 = vertices_temp[0];
                     auto& v2 = vertices_temp[1];
                     auto& v3 = vertices_temp[2];
-                    v1.color = v2.color = v3.color = colors[0];
+                    v1.color = v2.color = v3.color = color_tri_default;
                     uniform.triangles.emplace_back(v1, v2, v3);
 
                     reload_vertices(uniform, vertices_lines, vertices_triangles);
@@ -352,8 +381,8 @@ int main(int argc, char *args[])
                         uniform.moving = true;
                         uniform.curTriangleIdx = i;
                         uniform.start_position << dx, dy;
-                        select_trianlge(uniform, vertices_lines, colors[1]);
-                        start_moving_triangle(uniform, vertices_triangles, colors[2]);
+                        select_trianlge(uniform, vertices_lines, color_line_selected);
+                        start_moving_triangle(uniform, vertices_triangles, color_tri_selected);
                         viewer.redraw_next = true;
                         break;
                     }
@@ -366,12 +395,13 @@ int main(int argc, char *args[])
                 }
             }
             else if (uniform.moving) {
-                stop_moving_triangle(uniform, vertices_triangles, vertices_lines);
+                stop_moving_triangle(uniform, vertices_triangles);
                 uniform.moving = false;
                 viewer.redraw_next = true;
             }
         }
         else if (mode == ModeType::Delete && is_pressed) {
+            quit_animation(uniform);
             for (int i = uniform.triangles.size() - 1; i >= 0; --i) {
                 auto& tri = uniform.triangles[i];
                 if (tri.isPointInTriangle(Vector2f(dx, dy))) {
@@ -384,6 +414,7 @@ int main(int argc, char *args[])
         }
         else if (mode == ModeType::Color && is_pressed) {
             if (button == 1) {
+                quit_animation(uniform);
                 float minDis = FLT_MAX;
                 Vector2f curPos(dx, dy);
                 for (int i = 0; i < vertices_triangles.size(); ++i) {
@@ -397,7 +428,7 @@ int main(int argc, char *args[])
                 if (uniform.curVertexIdx != -1) {
                     vertices_points.clear();
                     VertexAttributes v1(vertices_triangles[uniform.curVertexIdx]);
-                    v1.color = colors[1];
+                    v1.color = color_line_selected;
                     v1.position[2] = 1;
                     vertices_points.push_back(v1);
                     vertices_points.push_back(v1);
@@ -461,32 +492,90 @@ int main(int argc, char *args[])
                 }
                 viewer.redraw_next = true;
             }
-            else if (mode == ModeType::Translate && uniform.curTriangleIdx != -1) {
-                if (key == 'h') {
-                    rotate_triangle(uniform, vertices_lines, vertices_triangles, -10);
-                    cout << "Rotated the trianlge by 10 degree clockwise." << endl;
+            else if (key == 'z') {
+                //add keyframe
+                uniform.keyframes.emplace_back(uniform.triangles);
+                cout << "Add one keyframe, " << uniform.keyframes.size() << " keyframes in total." << endl;
+            }
+            else if (key == 'x') {
+                //keep the first frame
+                if (!uniform.keyframes.empty()) {
+                    for (int i = 0; i < uniform.triangles.size(); ++i) {
+                        for (int j = 0; j < 3; ++j) {
+                            uniform.triangles[i].vertices[j].transformation = vertices_triangles[3 * i + j].transformation = uniform.keyframes[0].transformations[i];
+                        }
+                        for (int j = 0; j < 6; ++j) {
+                            vertices_lines[6 * i + j].transformation = uniform.keyframes[0].transformations[i];
+                        }
+                    }
                 }
-                else if (key == 'j') {
-                    rotate_triangle(uniform, vertices_lines, vertices_triangles, 10);
-                    cout << "Rotated the trianlge by 10 degree counter-clockwise." << endl;
-                }
-                else if (key == 'k') {
-                    scale_triangle(uniform, vertices_lines, vertices_triangles, 1.25);
-                    cout << "Scaled the trianlge up by 25%." << endl;
-                }
-                else if (key == 'l') {
-                    scale_triangle(uniform, vertices_lines, vertices_triangles, 0.75);
-                    cout << "Scaled the trianlge down by 25%." << endl;
-                }
+                //clear keyframes
+                quit_animation(uniform);
                 viewer.redraw_next = true;
             }
-            else if (mode == ModeType::Color && uniform.curVertexIdx != -1) {
-                if (key >= '1' && key <= '9') {
-                    auto& color = colors[key - '1'];
-                    vertices_triangles[uniform.curVertexIdx].color = uniform.triangles[uniform.curVertexIdx / 3].vertices[uniform.curVertexIdx % 3].color = color;
-                    viewer.redraw_next = true;
+            else if (key == 'v') {
+                //play animation made by linear interpolation
+                if (uniform.keyframes.empty()) {
+                    cout << "Keyframes is empty. Press z to add keyframe." << endl;
+                    return;
                 }
-            }         
+                cout << "Playing the animation made by Linear Interpolation." << endl;
+                if (uniform.curTriangleIdx != -1)
+                    release_triangle(uniform, vertices_lines);
+                const int frameNum = 30;
+                for (int i = 1; i < uniform.keyframes.size(); ++i) {
+                    auto& prev = uniform.keyframes[i - 1];
+                    auto& cur = uniform.keyframes[i];
+                    for (int j = 1; j <= frameNum; ++j) {
+                        float t = (float)j / frameNum;
+                        for (int k = 0; k < uniform.triangles.size(); ++k) {
+                            //linear interpolation
+                            auto &trans = t * cur.transformations[k] + (1 - t) * prev.transformations[k];
+                            set_rendering_triangle_transformation(vertices_lines, vertices_triangles, k, trans);
+                        }
+                        viewer.redraw(viewer);
+                        SDL_Delay(25);
+                    }
+                }
+                reload_vertices(uniform, vertices_lines, vertices_triangles);
+                if (uniform.curTriangleIdx != -1)
+                    select_trianlge(uniform, vertices_lines, color_line_selected);
+                viewer.redraw_next = true;
+            }
+            else if (key == 'b') {
+                //play animation made by Bezier curve
+                if (uniform.keyframes.empty()) {
+                    cout << "Keyframes is empty. Press z to add keyframe." << endl;
+                    return;
+                }
+                cout << "Playing the animation made by Bezier curve." << endl;
+                if (uniform.curTriangleIdx != -1)
+                    release_triangle(uniform, vertices_lines);
+                const int frameNum = uniform.keyframes.size() * 30;
+                for (int i = 1; i <= frameNum; ++i) {
+                    float t = (float)i / frameNum;
+                    for (int j = 0; j < uniform.triangles.size(); ++j) {
+                        std::vector<Matrix4f> prev, cur;
+                        for (int k = 0; k < uniform.keyframes.size(); ++k) {
+                            cur.emplace_back(uniform.keyframes[k].transformations[j]);
+                        }
+                        while (cur.size() > 1) {
+                            prev = cur;
+                            cur.clear();
+                            for (int k = 1; k < prev.size(); ++k) {
+                                cur.emplace_back((1 - t)* prev[k - 1] + t * prev[k]);
+                            }
+                        }
+                        set_rendering_triangle_transformation(vertices_lines, vertices_triangles, j, cur[0]);
+                    }
+                    viewer.redraw(viewer);
+                    SDL_Delay(25);
+                }
+                reload_vertices(uniform, vertices_lines, vertices_triangles);
+                if (uniform.curTriangleIdx != -1)
+                    select_trianlge(uniform, vertices_lines, color_line_selected);
+                viewer.redraw_next = true;
+            }
             else if (key == '=' || key == '-' || key == 'w' || key == 'a' || key == 's' || key == 'd') {
                 Matrix4f trans = Matrix4f::Identity();
                 if (key == '=') {
@@ -520,14 +609,41 @@ int main(int argc, char *args[])
                 reload_vertices(uniform, vertices_lines, vertices_triangles);
                 viewer.redraw_next = true;
             }
+            else if (mode == ModeType::Translate && uniform.curTriangleIdx != -1) {
+                auto& tri = uniform.triangles[uniform.curTriangleIdx];
+                if (key == 'h') {
+                    rotate_triangle(uniform, vertices_lines, vertices_triangles, -10);
+                    cout << "Rotated the trianlge by 10 degree clockwise." << endl;
+                }
+                else if (key == 'j') {
+                    rotate_triangle(uniform, vertices_lines, vertices_triangles, 10);
+                    cout << "Rotated the trianlge by 10 degree counter-clockwise." << endl;
+                }
+                else if (key == 'k') {
+                    scale_triangle(uniform, vertices_lines, vertices_triangles, 1.25);
+                    cout << "Scaled the trianlge up by 25%." << endl;
+                }
+                else if (key == 'l') {
+                    scale_triangle(uniform, vertices_lines, vertices_triangles, 0.75);
+                    cout << "Scaled the trianlge down by 25%." << endl;
+                }
+                viewer.redraw_next = true;
+            }
+            else if (mode == ModeType::Color && uniform.curVertexIdx != -1) {
+                if (key >= '1' && key <= '9') {
+                    auto& color = colors[key - '1'];
+                    vertices_triangles[uniform.curVertexIdx].color = uniform.triangles[uniform.curVertexIdx / 3].vertices[uniform.curVertexIdx % 3].color = color;
+                    viewer.redraw_next = true;
+                }
+            }         
         }
     };
 
-    viewer.redraw = [&](SDLViewer &viewer) {
+    viewer.redraw = [&](SDLViewer& viewer) {
         // Clear the framebuffer
         for (unsigned i = 0; i < frameBuffer.rows(); i++) {
             for (unsigned j = 0; j < frameBuffer.cols(); j++) {
-                frameBuffer(i,j).color << 255,255,255,255;
+                frameBuffer(i, j).color << 255, 255, 255, 255;
                 frameBuffer(i, j).depth = -1;
             }
         }
@@ -545,14 +661,14 @@ int main(int argc, char *args[])
         Eigen::Matrix<uint8_t, Eigen::Dynamic, Eigen::Dynamic> B(width, height);
         Eigen::Matrix<uint8_t, Eigen::Dynamic, Eigen::Dynamic> A(width, height);
 
-        for (unsigned i=0; i<frameBuffer.rows();i++)
+        for (unsigned i = 0; i < frameBuffer.rows(); i++)
         {
-            for (unsigned j=0; j<frameBuffer.cols();j++)
+            for (unsigned j = 0; j < frameBuffer.cols(); j++)
             {
-                R(i,frameBuffer.cols()-1-j) = frameBuffer(i,j).color(0);
-                G(i,frameBuffer.cols()-1-j) = frameBuffer(i,j).color(1);
-                B(i,frameBuffer.cols()-1-j) = frameBuffer(i,j).color(2);
-                A(i,frameBuffer.cols()-1-j) = frameBuffer(i,j).color(3);
+                R(i, frameBuffer.cols() - 1 - j) = frameBuffer(i, j).color(0);
+                G(i, frameBuffer.cols() - 1 - j) = frameBuffer(i, j).color(1);
+                B(i, frameBuffer.cols() - 1 - j) = frameBuffer(i, j).color(2);
+                A(i, frameBuffer.cols() - 1 - j) = frameBuffer(i, j).color(3);
             }
         }
         viewer.draw_image(R, G, B, A);

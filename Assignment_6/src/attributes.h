@@ -11,6 +11,12 @@ class VertexAttributes
 		color << 0,0,0,1;
 	}
 
+	VertexAttributes(Eigen::Vector4f& pos)
+	{
+		position = pos;
+		color << 0, 0, 0, 1;
+	}
+
     // Interpolates the vertex attributes
     static VertexAttributes interpolate(
         const VertexAttributes& a,
@@ -88,6 +94,17 @@ public:
 	}
 };
 
+class Keyframe {
+public:
+	std::vector<Eigen::Matrix4f> transformations;
+
+	Keyframe(const std::vector<Triangle>& triangles) {
+		for (const Triangle& tri : triangles) {
+			transformations.emplace_back(tri.vertices[0].transformation);
+		}
+	}
+};
+
 class UniformAttributes
 {
 public:
@@ -96,4 +113,6 @@ public:
 	int curVertexIdx = -1;
 	Eigen::Vector2f start_position;
 	std::vector<Triangle> triangles;
+
+	std::vector<Keyframe> keyframes;
 };
